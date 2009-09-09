@@ -32,7 +32,7 @@ use English "-no_match_vars";
 # 131.170.65.0/24:      CS Infrastructure
 # 131.170.66.0/24:      CS Infrastructure
 # 131.170.204.0/26:     Labs:   Games Studio            (014.11.037)
-# 131.170.204.64/26:            Sutherland                      
+# 131.170.204.64/26:            Sutherland
 # 131.170.204.128/26:           Alice
 # 131.170.204.192/26:           RMIT Training
 # 131.170.205.0/26:             Beard                   (014.10.032)
@@ -40,14 +40,14 @@ use English "-no_match_vars";
 # 131.170.205.128/26:           Knuth                   (014.10.031)
 # 131.170.205.192/26:           Lions                   (014.10.030)
 # 131.170.206.0/26:             Hopper                  (014.09.015)
-# 131.170.206.64/26:            Aho                     (010.11.017)
-# 131.170.206.128/26:           Bolam                   (010.11.022)
+#                               Aho                     (010.11.017)
+# 131.170.206.64/26:            Bolam                   (010.11.022)
+# 131.170.206.128/26:           
 # 131.170.206.192/26:           Babbage                 (014.09.023)
 # 131.170.207.0/26:     CS Printers
 # 131.170.207.64/26:    Roaming laptops, mobiles, Wiis
-# 131.17/0.207.128/26:   Yoursoftware lab
+# 131.170.207.128/26:   Yoursoftware lab
 # 131.170.207.192/26:   Non-CS staff                    (010.11)
-
 
 ################################
 # START USER CHANGEABLE CONFIG
