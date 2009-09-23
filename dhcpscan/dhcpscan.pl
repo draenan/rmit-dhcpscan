@@ -11,6 +11,7 @@
 #
 ##########################################################################
 
+$|++;
 use strict;
 use warnings;
 use Class::Struct;
@@ -18,7 +19,7 @@ use IO::Zlib;
 use Net::DNS;
 use Net::Ping;
 use POSIX "strftime";
-use English "-no_match_vars";
+use Data::Dumper;
 
 # These are the city subnets maintained on ns1.cs
 
@@ -79,9 +80,11 @@ my $rebuild      = 0;                     # Rebuild the cache (default NO)
 my $rebuildfrom  = 0;                     # Array index: rebuild from this file
 
 
-# Script needs root privs to read log files and ping with ICMP.
+# Script needs EUID root privs to read log files and ping with ICMP.
 
 #die "Need to run as root.\n" unless ($EUID == 0);
+
+goto Testing;
 
 # Check to see if both files necessary to the cache exist.
 
@@ -209,6 +212,9 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
             push (@logdata, $line);
         }
     }
+
+# TODO Code to add data from current log file.
+
     print "Total of $#logdata matching lines.\n";
 
 # Write out the collected data to the cache files.
@@ -221,8 +227,99 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
     }
     $fh->close;
     open LASTFILE, ">", $lastfile or die "Could not open $lastfile: $!";
-    print LASTFILE $files[$#files];
+    print LASTFILE $files[$#files]."\n";
     close LASTFILE;
+} 
+
+# TODO Code to print out initial HTML of output page.
+
+Testing:
+
+# TODO Remove the $fh declaration when removing label
+
+my $fh = new IO::Zlib;
+
+struct ipaddr_data => { count       => '$',
+                        address     => '$',
+                        hostname    => '@',
+                        first       => '$',
+                        last        => '$',
+                        notes       => '@' };
+my @data;
+my $res = Net::DNS::Resolver->new;
+
+foreach my $subnet (@subnets) {
+
+# Gather information about the subnet for use in building the tables.
+
+    my ($subnet_addr, $cidr_prefix) = split (/\//, $subnet);
+    my ($sub_octs, $host_oct) = ($subnet_addr =~ /(.*\..*\..*)\.(.*)/);
+    my $bcast_host = (2 ** (32 - $cidr_prefix)) - 1 + $host_oct;
+    my $subnet_bcast_addr  = join ('.', $sub_octs, $bcast_host);
+    my $subnet_router_addr = join ('.', $sub_octs, ($bcast_host - 1)); 
+
+# Create and initialize the structs for the subnet.
+
+    print "\n*** Working on subnet $subnet.\n";
+    print "Creating data structures... ";
+
+    my @subnet_data = map { ipaddr_data->new } 0..($bcast_host - $host_oct);
+    for (my $i = 0; $i < @subnet_data; $i++) {
+        if ($i == 0) {
+            $subnet_data[$i]->address($subnet_addr);
+            push @{ $subnet_data[$i]->notes }, "Network address";
+        }
+        elsif ($i == ($#subnet_data - 1)) {
+            $subnet_data[$i]->address($subnet_router_addr);
+            push @{ $subnet_data[$i]->notes }, "Router address";
+        }
+        elsif ($i == $#subnet_data) {
+            $subnet_data[$i]->address($subnet_bcast_addr);
+            push @{ $subnet_data[$i]->notes }, "Broadcast address";
+        }
+        else {
+            my $address = join ('.', $sub_octs, $i);
+            $subnet_data[$i]->count('0');
+            $subnet_data[$i]->address($address);
+        }
+    } 
+    print "done.\n";
+
+# Search the cache file for data relating to the current subnet.
+
+    print "Populating data structures... ";
+
+    $fh->open($cachefile, "rb") or
+        die "Could not open $cachefile: $!";
+    while (my $line = $fh->getline()) {
+        next unless $line =~ /$sub_octs/;
+        my ($date, $host) = ($line =~ /^(.*:\d{2}).*\.(\d{1,3})\n$/);
+        if ( ($host > $host_oct) and ($host < $bcast_host)) {
+            $host -= $host_oct;
+            $subnet_data[$host]->last($date);
+            $subnet_data[$host]->first($date) unless defined $subnet_data[$host]->first;
+            unless ($subnet_data[$host]->hostname(0)) {
+                my $query = $res->query($subnet_data[$host]->address);
+                if ($query) {
+                    foreach my $rr ($query->answer) {
+                        next unless $rr->type eq "PTR";
+                        push @{ $subnet_data[$host]->hostname }, $rr->rdatastr;
+                    }
+                } else {
+                    push @{ $subnet_data[$host]->hostname }, "UNKNOWN";
+                    push @{ $subnet_data[$host]->notes }, $res->errorstring;
+                }
+            }
+            $subnet_data[$host]->count($subnet_data[$host]->count + 1);
+        }
+    }
+    $fh->close;
+    print "done.\n";
+    push (@data, \@subnet_data);
+}
+
+foreach my $subnet_data (@data) {
+    print Dumper($subnet_data);
 }
 
 # vi: set tabstop=4 shiftwidth=4 expandtab si ai nu:
