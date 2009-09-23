@@ -19,7 +19,6 @@ use IO::Zlib;
 use Net::DNS;
 use Net::Ping;
 use POSIX "strftime";
-use Data::Dumper;
 
 # These are the city subnets maintained on ns1.cs
 
@@ -63,9 +62,11 @@ my $outputdir    = "./";
 
 # These are the subnets which we will search the logs for.
 
-my @subnets = qw ( 131.170.26.0/25
-                   131.170.26.128/25
-                   131.170.27.0/25 );
+my @subnets = qw (  131.170.25.0/25
+                    131.170.25.128/25
+                    131.170.26.0/25 
+                    131.170.26.128/25
+                    131.170.27.0/25 );
 
 ################################
 # END USER CHANGEABLE CONFIG
@@ -231,13 +232,14 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
     close LASTFILE;
 } 
 
-# TODO Code to print out initial HTML of output page.
-
 Testing:
 
 # TODO Remove the $fh declaration when removing label
 
 my $fh = new IO::Zlib;
+
+# Set up array to contain the data structures for subnet address data and
+# initialize a resolver.
 
 struct ipaddr_data => { count       => '$',
                         address     => '$',
@@ -248,9 +250,12 @@ struct ipaddr_data => { count       => '$',
 my @data;
 my $res = Net::DNS::Resolver->new;
 
+# Gather data from the cache for each subnet and put it into the data array.
+
 foreach my $subnet (@subnets) {
 
-# Gather information about the subnet for use in building the tables.
+# Gather information about the subnet for use in building the individual
+# subnet data array.
 
     my ($subnet_addr, $cidr_prefix) = split (/\//, $subnet);
     my ($sub_octs, $host_oct) = ($subnet_addr =~ /(.*\..*\..*)\.(.*)/);
@@ -258,30 +263,57 @@ foreach my $subnet (@subnets) {
     my $subnet_bcast_addr  = join ('.', $sub_octs, $bcast_host);
     my $subnet_router_addr = join ('.', $sub_octs, ($bcast_host - 1)); 
 
-# Create and initialize the structs for the subnet.
+# Create and initialize the structs for the subnet data array.
 
-    print "\n*** Working on subnet $subnet.\n";
-    print "Creating data structures... ";
+    print "\n*** Working on subnet $subnet ***\n";
+    print "Creating data structures...   ";
 
     my @subnet_data = map { ipaddr_data->new } 0..($bcast_host - $host_oct);
-    for (my $i = 0; $i < @subnet_data; $i++) {
-        if ($i == 0) {
-            $subnet_data[$i]->address($subnet_addr);
-            push @{ $subnet_data[$i]->notes }, "Network address";
+
+# Fill in known information (address, hostname, host role, etc)
+    
+    for (my $host = 0; $host < @subnet_data; $host++) {
+        if ($host == 0) {
+            $subnet_data[$host]->address($subnet_addr);
+            $subnet_data[$host]->count(-1);
+            push @{ $subnet_data[$host]->notes }, "Network address";
         }
-        elsif ($i == ($#subnet_data - 1)) {
-            $subnet_data[$i]->address($subnet_router_addr);
-            push @{ $subnet_data[$i]->notes }, "Router address";
+        elsif ($host == ($#subnet_data - 1)) {
+            $subnet_data[$host]->address($subnet_router_addr);
+            $subnet_data[$host]->count(-1);
+            push @{ $subnet_data[$host]->notes }, "Router address";
         }
-        elsif ($i == $#subnet_data) {
-            $subnet_data[$i]->address($subnet_bcast_addr);
-            push @{ $subnet_data[$i]->notes }, "Broadcast address";
+        elsif ($host == $#subnet_data) {
+            $subnet_data[$host]->address($subnet_bcast_addr);
+            $subnet_data[$host]->count(-1);
+            push @{ $subnet_data[$host]->notes }, "Broadcast address";
         }
         else {
-            my $address = join ('.', $sub_octs, $i);
-            $subnet_data[$i]->count('0');
-            $subnet_data[$i]->address($address);
+            my $address = join ('.', $sub_octs, ($host + $host_oct));
+            $subnet_data[$host]->count(0);
+            $subnet_data[$host]->address($address);
         }
+
+# Get hostname for all hosts other than the network and broadcast address.
+
+        unless (( $host == 0 ) or ( $host == $#subnet_data )) {
+            my $query = $res->query($subnet_data[$host]->address);
+            if ($query) {
+                foreach my $rr ($query->answer) {
+                    next unless $rr->type eq "PTR";
+                    push @{ $subnet_data[$host]->hostname }, $rr->rdatastr;
+                }
+            } else {
+                push @{ $subnet_data[$host]->hostname }, "UNKNOWN";
+                if ( $res->errorstring eq 'NXDOMAIN') {
+                    push @{ $subnet_data[$host]->notes }, "AVAILABLE";
+                }
+                else {
+                    push @{ $subnet_data[$host]->notes }, $res->errorstring;
+                }
+            }
+        }
+
     } 
     print "done.\n";
 
@@ -293,33 +325,33 @@ foreach my $subnet (@subnets) {
         die "Could not open $cachefile: $!";
     while (my $line = $fh->getline()) {
         next unless $line =~ /$sub_octs/;
+
+# Extract data from the log line and populate the relevant host record with
+# the information.  The conditional is needed to cater for the use of subnets
+# smaller than /24.  The use of "count" is slightly off, given that the
+# DHCP server frequently sends more than one DHCPACK.
+
         my ($date, $host) = ($line =~ /^(.*:\d{2}).*\.(\d{1,3})\n$/);
         if ( ($host > $host_oct) and ($host < $bcast_host)) {
             $host -= $host_oct;
             $subnet_data[$host]->last($date);
             $subnet_data[$host]->first($date) unless defined $subnet_data[$host]->first;
-            unless ($subnet_data[$host]->hostname(0)) {
-                my $query = $res->query($subnet_data[$host]->address);
-                if ($query) {
-                    foreach my $rr ($query->answer) {
-                        next unless $rr->type eq "PTR";
-                        push @{ $subnet_data[$host]->hostname }, $rr->rdatastr;
-                    }
-                } else {
-                    push @{ $subnet_data[$host]->hostname }, "UNKNOWN";
-                    push @{ $subnet_data[$host]->notes }, $res->errorstring;
-                }
-            }
             $subnet_data[$host]->count($subnet_data[$host]->count + 1);
         }
     }
     $fh->close;
     print "done.\n";
+
+# Push the array of subnet data onto the main array.
+
     push (@data, \@subnet_data);
 }
 
-foreach my $subnet_data (@data) {
-    print Dumper($subnet_data);
-}
+# TODO Output data to file.
+
+#use Data::Dumper;
+#foreach my $subnet_data (@data) {
+#    print Dumper($subnet_data);
+#}
 
 # vi: set tabstop=4 shiftwidth=4 expandtab si ai nu:
