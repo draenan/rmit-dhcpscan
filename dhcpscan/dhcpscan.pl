@@ -13,7 +13,7 @@
 
 $|++;
 use strict;
-use warnings;
+#use warnings;
 use Class::Struct;
 use IO::Zlib;
 use Net::DNS;
@@ -62,11 +62,8 @@ my $outputdir    = "./";
 
 # These are the subnets which we will search the logs for.
 
-my @subnets = qw (  131.170.25.0/25
-                    131.170.25.128/25
-                    131.170.26.0/25 
-                    131.170.26.128/25
-                    131.170.27.0/25 );
+my @subnets = qw (  131.170.26.0/25
+                    131.170.26.128/25 );
 
 ################################
 # END USER CHANGEABLE CONFIG
@@ -74,7 +71,7 @@ my @subnets = qw (  131.170.25.0/25
 
 
 my $now          = strftime("%Y%m%d-%H%M%S", localtime);
-my $outputfile   = $outputdir."dhcpdscan-".$now.".html";
+my $outputfile   = $outputdir."dhcpscan-".$now.".html";
 my $cachefile    = $cachedir."cache.gz";
 my $lastfile     = $cachedir."lastfile";
 my $rebuild      = 0;                     # Rebuild the cache (default NO)
@@ -86,6 +83,8 @@ my $rebuildfrom  = 0;                     # Array index: rebuild from this file
 #die "Need to run as root.\n" unless ($EUID == 0);
 
 goto Testing;
+
+print "**** Working on log files ****\n";
 
 # Check to see if both files necessary to the cache exist.
 
@@ -347,11 +346,172 @@ foreach my $subnet (@subnets) {
     push (@data, \@subnet_data);
 }
 
-# TODO Output data to file.
+# Create the output file.
+# I'm tired.  No more comments.  You're on your own from here!
 
-#use Data::Dumper;
-#foreach my $subnet_data (@data) {
-#    print Dumper($subnet_data);
-#}
+print "\n**** Generating output file ****\n";
+print "Sending output to $outputfile ... ";
 
+open OUTFILE, ">", $outputfile or die "Could not open $outputfile: $!";
+
+print OUTFILE <<EOT;
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html;charset=utf-8" /> 
+        <style type="text/css">
+        <!--
+            body {
+            	background-color: white;
+                color: black;
+                font-size: small;
+                font-family: Arial, Helvetica, sans-serif;
+            }
+            table {
+            	border: 2px solid black;
+            	border-collapse: collapse;
+            }
+            th {
+		        background-color: #cccccc;
+            	border: 1px solid black;
+            	border-bottom-width: 2px;
+            	padding: 5px 5px 5px 5px;
+            }
+            td {
+            	border: 1px solid black;
+            	padding: 5px 5px 5px 5px;
+            }
+            a:visited {
+            	color: blue;
+            }
+            .available {
+            	background-color: #99ff99;
+            }
+            .unusable {
+           	    background-color: #ff9999;
+            }	
+            .footer {
+            	font-size: small;
+            	font-style: italic;
+            }
+        -->
+        </style>    
+        <title>dhcpscan.pl - Run on $now</title>
+    </head>
+    <body>
+    	<h1><em>dhcpscan.pl</em></h1>
+    	<p>Subnets:</p>
+        <ul>
+EOT
+
+my $counter = 0;
+foreach my $subnet (@subnets) {
+    print OUTFILE "            <li><a href=\"#subnet-$counter\">$subnet</a></li>\n";
+    $counter++;
+}
+
+print OUTFILE <<EOT;
+        </ul>
+        <hr />
+EOT
+
+$counter = 0;
+foreach my $subnet (@subnets) {
+    print OUTFILE "        <h3 id=\"subnet-$counter\">$subnet</h3>\n";
+
+    print OUTFILE <<EOT;
+        <table>
+            <tr>
+                <th>Count</th>
+                <th>IP Address</th>
+                <th>Hostname</th>
+                <th>First Appearance</th>
+                <th>Last Appearance</th>
+                <th>Notes</th>
+            </tr>
+EOT
+
+    foreach my $subnet ($data[$counter]) {
+        foreach my $ipaddr (@$subnet) {
+            if ($ipaddr->count == -1) {
+                print OUTFILE "            <tr class=\"unusable\">\n";
+            }
+            elsif ( ($ipaddr->count == 0) or ($ipaddr->notes(0) eq "AVAILABLE") ) {
+                print OUTFILE "            <tr class=\"available\">\n";
+                if ( ($ipaddr->count == 0) and ($ipaddr->hostname(0) ne "UNKNOWN") ) {
+                    push @{ $ipaddr->notes }, "Available?";
+                }
+            }
+            else {
+                print OUTFILE "            <tr>\n";
+            }
+            print OUTFILE "                <td style=\"text-align: right\">";
+            if ($ipaddr->count < 0) {
+                print OUTFILE "&nbsp;</td>\n";
+            }
+            else {
+                print OUTFILE $ipaddr->count."</td>\n";
+            }
+            print OUTFILE "                <td>".$ipaddr->address."</td>\n";
+            print OUTFILE "                <td>";
+            if ($ipaddr->hostname(0)) {
+                foreach my $hostname (@{$ipaddr->hostname}) {
+                    print OUTFILE $hostname."<br />";
+                }
+                print OUTFILE "</td>\n";
+            }
+            else {
+                print OUTFILE "&nbsp;</td>\n";
+            }
+            print OUTFILE "                <td>";
+            if (not defined $ipaddr->first) {
+                print OUTFILE "&nbsp;</td>\n";
+            }
+            else {
+                print OUTFILE $ipaddr->first."</td>\n";
+            }
+            print OUTFILE "                <td>";
+            if (not defined $ipaddr->last) {
+                print OUTFILE "&nbsp;</td>\n";
+            }
+            else {
+                print OUTFILE $ipaddr->last."</td>\n";
+            }
+            print OUTFILE "                <td>";
+            if ($ipaddr->notes(0)) {
+                foreach my $note (@{$ipaddr->notes}) {
+                    print OUTFILE $note."<br />";
+                }
+                print OUTFILE "</td>\n";
+            }
+            else {
+                print OUTFILE "&nbsp;</td>\n";
+            }
+            print OUTFILE "            </tr>\n";
+        }
+    }
+
+print OUTFILE <<EOT;
+        </table>
+        <p><a href=\"#\">^</a></p>
+EOT
+
+$counter++;
+}
+
+print OUTFILE <<EOT;
+        <hr />
+        <div class=\"footer\">
+            <p>dhcpscan.pl run on $now</p>
+            <p>Valid XHTML 1.1</p>
+        </div>
+    </body>
+</html>
+EOT
+
+close OUTFILE;
+
+print "done.\n";
+    
 # vi: set tabstop=4 shiftwidth=4 expandtab si ai nu:
