@@ -13,7 +13,7 @@
 
 $|++;
 use strict;
-#use warnings;
+#use warnings; # Not disabling this produces apparently bogus warnings.
 use Class::Struct;
 use IO::Zlib;
 use Net::DNS;
@@ -245,9 +245,11 @@ struct ipaddr_data => { count       => '$',
                         hostname    => '@',
                         first       => '$',
                         last        => '$',
+                        isup        => '$',
                         notes       => '@' };
 my @data;
 my $res = Net::DNS::Resolver->new;
+my $p   = Net::Ping->new;
 
 # Gather data from the cache for each subnet and put it into the data array.
 
@@ -349,7 +351,7 @@ foreach my $subnet (@subnets) {
 # Create the output file.
 # I'm tired.  No more comments.  You're on your own from here!
 
-print "\n**** Generating output file ****\n";
+print "\n**** Generating output file (may take a while - pinging some hosts)  ****\n";
 print "Sending output to $outputfile ... ";
 
 open OUTFILE, ">", $outputfile or die "Could not open $outputfile: $!";
@@ -390,6 +392,9 @@ print OUTFILE <<EOT;
             }
             .unusable {
            	    background-color: #ff9999;
+            }	
+            .static {
+           	    background-color: #ffff99;
             }	
             .footer {
             	font-size: small;
@@ -434,20 +439,32 @@ EOT
 
     foreach my $subnet ($data[$counter]) {
         foreach my $ipaddr (@$subnet) {
+
+# Why the hell would I be getting a "Use of uninitialized value in string eq"
+# warnings here for values of count not equal to -1 or 0?  A diagnostic print
+# before the "if" and after the "else" show that $ipaddr->count *is* defined.
+# Simple solution?  Disable warnings.  Grr.
+
             if ($ipaddr->count == -1) {
                 print OUTFILE "            <tr class=\"unusable\">\n";
             }
             elsif ( ($ipaddr->count == 0) or ($ipaddr->notes(0) eq "AVAILABLE") ) {
-                print OUTFILE "            <tr class=\"available\">\n";
-                if ( ($ipaddr->count == 0) and ($ipaddr->hostname(0) ne "UNKNOWN") ) {
-                    push @{ $ipaddr->notes }, "Available?";
+                if ($p->ping($ipaddr->address, 2)) {
+                    print OUTFILE "            <tr class=\"static\">\n";
+                    push @{ $ipaddr->notes }, "Responded to ping";
+                }
+                else {
+                    print OUTFILE "            <tr class=\"available\">\n";
+                    if ( ($ipaddr->count == 0) and ($ipaddr->hostname(0) ne "UNKNOWN") ) {
+                        push @{ $ipaddr->notes }, "Available?";
+                    }
                 }
             }
             else {
                 print OUTFILE "            <tr>\n";
             }
             print OUTFILE "                <td style=\"text-align: right\">";
-            if ($ipaddr->count < 0) {
+            if ($ipaddr->count == -1) {
                 print OUTFILE "&nbsp;</td>\n";
             }
             else {
