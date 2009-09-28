@@ -6,14 +6,13 @@
 #
 # Scans log files for dhcp activity and builds a web page showing status
 # per each requested subnet.  That is, how many times an IP address
-# has been acknowledged, first time, last time, hostname, response to
-# a test ping.
+# has been acknowledged, first time, last time, hostname, suspected
+# status (available, statically assigned, etc.)
 #
 ##########################################################################
 
 $|++;
 use strict;
-#use warnings; # Not disabling this produces apparently bogus warnings.
 use Class::Struct;
 use IO::Zlib;
 use Net::DNS;
@@ -77,14 +76,11 @@ my $lastfile     = $cachedir."lastfile";
 my $rebuild      = 0;                     # Rebuild the cache (default NO)
 my $rebuildfrom  = 0;                     # Array index: rebuild from this file
 
-
 # Script needs EUID root privs to read log files and ping with ICMP.
 
-#die "Need to run as root.\n" unless ($EUID == 0);
+die "\nNeed to run as root.\n" unless ($< == 0);
 
-goto Testing;
-
-print "**** Working on log files ****\n";
+print "\n**** Working on log files ****\n";
 
 # Check to see if both files necessary to the cache exist.
 
@@ -213,8 +209,6 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
         }
     }
 
-# TODO Code to add data from current log file.
-
     print "Total of $#logdata matching lines.\n";
 
 # Write out the collected data to the cache files.
@@ -231,11 +225,18 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
     close LASTFILE;
 } 
 
-Testing:
 
-# TODO Remove the $fh declaration when removing label
+# Get data from the active log file.
 
-my $fh = new IO::Zlib;
+print "Gathering  data from the active log file.\n";
+open CURRENTLOG, "<", $logfile or die "Could not open $logfile: $!";
+while (my $line = <CURRENTLOG>) {
+    next unless $line =~ /$searchstr/;
+    push (@logdata, $line);
+}
+close CURRENTLOG;
+
+print "Data gathering complete.\n";
 
 # Set up array to contain the data structures for subnet address data and
 # initialize a resolver.
@@ -245,11 +246,10 @@ struct ipaddr_data => { count       => '$',
                         hostname    => '@',
                         first       => '$',
                         last        => '$',
-                        isup        => '$',
                         notes       => '@' };
 my @data;
 my $res = Net::DNS::Resolver->new;
-my $p   = Net::Ping->new;
+my $p   = Net::Ping->new("icmp", 2);
 
 # Gather data from the cache for each subnet and put it into the data array.
 
@@ -449,7 +449,7 @@ EOT
                 print OUTFILE "            <tr class=\"unusable\">\n";
             }
             elsif ( ($ipaddr->count == 0) or ($ipaddr->notes(0) eq "AVAILABLE") ) {
-                if ($p->ping($ipaddr->address, 2)) {
+                if ($p->ping($ipaddr->address)) {
                     print OUTFILE "            <tr class=\"static\">\n";
                     push @{ $ipaddr->notes }, "Responded to ping";
                 }
