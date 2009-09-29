@@ -89,7 +89,7 @@ die "Need to run as root.\n" unless ($< == 0);
 # Check command line arguments for subnets to check.
 
 if (@ARGV == 0) {
-    print "Usage: dhcpscan.pl subnet ...\n";
+    print "Usage: dhcpscan.pl subnet [...]\n";
     print "       where subnet is a subnet in CIDR format.\n";
     print "       eg 131.170.27.0/25\n";
     exit 1;
