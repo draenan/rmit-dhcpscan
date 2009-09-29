@@ -52,17 +52,16 @@ use POSIX "strftime";
 # START USER CHANGEABLE CONFIG
 ################################
 
-my $cachedir     = "/home/adrianw/var/dhcpscan/";
-my $logfile      = "/home/adrianw/var/log/daemon";
-my $oldlogs      = "/home/adrianw/var/log/daemon.d/";
+my $cachedir     = "/var/dhcpscan/cache/";
+my $logfile      = "/var/log/daemon";
+my $oldlogs      = "/var/log/daemon.d/";
 my $searchstr    = "DHCPACK to";   # Search logs for this string.
 my $numoldfiles  = 15;             # DELETE cache files if you change this.
-my $outputdir    = "./";
+my $outputdir    = "/var/dhcpscan/";
 
 # These are the subnets which we will search the logs for.
 
-my @subnets = qw (  131.170.26.0/25
-                    131.170.26.128/25 );
+my @subnets = qw (  131.170.26.0/25 );
 
 ################################
 # END USER CHANGEABLE CONFIG
@@ -231,15 +230,17 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
 
 # Get data from the active log file.
 
+my $line;
 print "Gathering  data from the active log file.\n";
 open CURRENTLOG, "<", $logfile or die "Could not open $logfile: $!";
-while (my $line = <CURRENTLOG>) {
+while ($line = <CURRENTLOG>) {
     next unless $line =~ /$searchstr/;
     push (@logdata, $line);
 }
 close CURRENTLOG;
 
 print "Data gathering complete.\n";
+print @logdata." total matching lines.\n";
 
 # Set up array to contain the data structures for subnet address data and
 # initialize a resolver.
@@ -254,7 +255,8 @@ my @data;
 my $res = Net::DNS::Resolver->new;
 my $p   = Net::Ping->new("icmp", 1);
 
-# Gather data from the cache for each subnet and put it into the data array.
+# Go through each line in the logdata array looking for info for each subnet
+# and put it into the data array.
 
 foreach my $subnet (@subnets) {
 
@@ -325,9 +327,7 @@ foreach my $subnet (@subnets) {
 
     print "Populating data structures... ";
 
-    $fh->open($cachefile, "rb") or
-        die "Could not open $cachefile: $!";
-    while (my $line = $fh->getline()) {
+    foreach my $line (@logdata) {
         next unless $line =~ /$sub_octs/;
 
 # Extract data from the log line and populate the relevant host record with
