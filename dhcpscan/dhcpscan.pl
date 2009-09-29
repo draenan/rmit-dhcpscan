@@ -9,6 +9,16 @@
 # has been acknowledged, first time, last time, hostname, suspected
 # status (available, statically assigned, etc.)
 #
+# This will only work on subnets /24 or smaller, and is pretty much
+# only guaranteed to run on ns1.cs (subject to the note below.)
+# Virtually no input sanitizing is done.
+#
+# No liability, no warranty, AS IS, etc.
+#
+# NOTE: Due to the size of the log files, this needs a lot of memory to
+#       run (approx 260-280MB).  The default limit for datasize is
+#       insufficient for this.  Accordingly, it is suggested you run
+#       "limit datasize 290000" prior to running this (assuming tcsh).
 ##########################################################################
 
 $|++;
@@ -59,14 +69,9 @@ my $searchstr    = "DHCPACK to";   # Search logs for this string.
 my $numoldfiles  = 15;             # DELETE cache files if you change this.
 my $outputdir    = "/var/dhcpscan/";
 
-# These are the subnets which we will search the logs for.
-
-my @subnets = qw (  131.170.26.0/25 );
-
 ################################
 # END USER CHANGEABLE CONFIG
 ################################
-
 
 my $now          = strftime("%Y%m%d-%H%M%S", localtime);
 my $outputfile   = $outputdir."dhcpscan-".$now.".html";
@@ -75,9 +80,30 @@ my $lastfile     = $cachedir."lastfile";
 my $rebuild      = 0;                     # Rebuild the cache (default NO)
 my $rebuildfrom  = 0;                     # Array index: rebuild from this file
 
+my @subnets;
+
 # Script needs EUID root privs to read log files and ping with ICMP.
 
 die "Need to run as root.\n" unless ($< == 0);
+
+# Check command line arguments for subnets to check.
+
+if (@ARGV == 0) {
+    print "Usage: dhcpscan.pl subnet ...\n";
+    print "       where subnet is a subnet in CIDR format.\n";
+    print "       eg 131.170.27.0/25\n";
+    exit 1;
+}
+
+foreach (@ARGV) {
+    if (/\d{3}\.\d{3}\.\d{1,3}\.\d{1,3}\/\d{1,2}/) {
+        push (@subnets, $_);
+    }
+    else {
+        print "Invalid argument.\n";
+        exit 1;
+    }
+}
 
 print "**** Working on log files ****\n";
 
@@ -227,7 +253,6 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
     close LASTFILE;
 } 
 
-
 # Get data from the active log file.
 
 my $line;
@@ -323,7 +348,7 @@ foreach my $subnet (@subnets) {
     } 
     print "done.\n";
 
-# Search the cache file for data relating to the current subnet.
+# Search the logdata array for data relating to the current subnet.
 
     print "Populating data structures... ";
 
@@ -352,7 +377,6 @@ foreach my $subnet (@subnets) {
 }
 
 # Create the output file.
-# I'm tired.  No more comments.  You're on your own from here!
 
 print "\n**** Generating output file (may take a while - pinging some hosts)  ****\n";
 print "Sending output to $outputfile ... ";
@@ -533,5 +557,6 @@ EOT
 close OUTFILE;
 
 print "done.\n";
+exit 0;
     
 # vi: set tabstop=4 shiftwidth=4 expandtab si ai nu:
