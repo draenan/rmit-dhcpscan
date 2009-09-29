@@ -78,9 +78,9 @@ my $rebuildfrom  = 0;                     # Array index: rebuild from this file
 
 # Script needs EUID root privs to read log files and ping with ICMP.
 
-die "\nNeed to run as root.\n" unless ($< == 0);
+die "Need to run as root.\n" unless ($< == 0);
 
-print "\n**** Working on log files ****\n";
+print "**** Working on log files ****\n";
 
 # Check to see if both files necessary to the cache exist.
 
@@ -97,6 +97,9 @@ my @files = sort grep (!/^\.(\.)?$/, readdir(DIR));
 closedir(DIR);
 
 # Not much point trying to read more files than actually exist...
+# Actually, the use of "$#files" instead of "@files" here and
+# elsewhere seems less than ideal; can't remember why I used it
+# but it works so I'm not "fixing" it.
 
 if ( $#files < $numoldfiles ) {
     $numoldfiles = $#files;
@@ -249,7 +252,7 @@ struct ipaddr_data => { count       => '$',
                         notes       => '@' };
 my @data;
 my $res = Net::DNS::Resolver->new;
-my $p   = Net::Ping->new("icmp", 2);
+my $p   = Net::Ping->new("icmp", 1);
 
 # Gather data from the cache for each subnet and put it into the data array.
 
