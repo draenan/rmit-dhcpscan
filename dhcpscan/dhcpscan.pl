@@ -5,7 +5,7 @@
 # dhcpscan.pl
 #
 # Scans log files for dhcp activity and builds a web page showing status
-# per each requested subnet.  That is, how many times an IP address
+# for each requested subnet.  That is, how many times an IP address
 # has been acknowledged, first time, last time, hostname, suspected
 # status (available, statically assigned, etc.)
 #
@@ -237,7 +237,7 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
         }
     }
 
-    print "Total of $#logdata matching lines.\n";
+    print "Total of @logdata matching lines.\n";
 
 # Write out the collected data to the cache files.
 
@@ -344,7 +344,6 @@ foreach my $subnet (@subnets) {
                 }
             }
         }
-
     } 
     print "done.\n";
 
