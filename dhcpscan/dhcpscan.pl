@@ -65,8 +65,8 @@ use POSIX "strftime";
 my $cachedir     = "/var/dhcpscan/cache/";
 my $logfile      = "/var/log/daemon";
 my $oldlogs      = "/var/log/daemon.d/";
-my $searchstr    = "DHCPACK to";   # Search logs for this string.
-my $numoldfiles  = 15;             # DELETE cache files if you change this.
+my $searchstr    = "DHCPACK (to|on)";   # Search logs for this string.
+my $numoldfiles  = 15;                  # DELETE cache files if you change this.
 my $outputdir    = "/var/dhcpscan/";
 
 ################################
@@ -90,13 +90,13 @@ die "Need to run as root.\n" unless ($< == 0);
 
 if (@ARGV == 0) {
     print "Usage: dhcpscan.pl subnet [...]\n";
-    print "       where subnet is a subnet in CIDR format.\n";
+    print "       where subnet is a subnet in CIDR format (/24 or smaller).\n";
     print "       eg 131.170.27.0/25\n";
     exit 1;
 }
 
 foreach (@ARGV) {
-    if (/\d{3}\.\d{3}\.\d{1,3}\.\d{1,3}\/\d{1,2}/) {
+    if (/\d{3}\.\d{3}\.\d{1,3}\.\d{1,3}\/\d{2}/) {
         push (@subnets, $_);
     }
     else {
@@ -212,7 +212,7 @@ if ( ! $rebuild ) {
 # If there are new archive files to process (either through new additions
 # to the archive directory for the cache file, or a cache rebuild,) do so.
 
-if ($#files > 0 and $rebuildfrom <= $#files) {
+if (@files > 0 and $rebuildfrom < @files) {
     print "Add to cache starting with file ".$files[$rebuildfrom]."\n";
 
 # Only process those files that we need to by using the rebuildfrom
@@ -359,7 +359,7 @@ foreach my $subnet (@subnets) {
 # smaller than /24.  The use of "count" is slightly off, given that the
 # DHCP server frequently sends more than one DHCPACK.
 
-        my ($date, $host) = ($line =~ /^(.*:\d{2}).*\.(\d{1,3})\n$/);
+        my ($date, $host) = ($line =~ /^(.*:\d{2}).*DHCP.*?\d{1,3}\.\d{1,3}\.\d{1,3}\.(\d{1,3})/);
         if ( ($host > $host_oct) and ($host < $bcast_host)) {
             $host -= $host_oct;
             $subnet_data[$host]->last($date);
