@@ -237,7 +237,7 @@ if ($#files > 0 and $rebuildfrom <= $#files) {
         }
     }
 
-    print "Total of @logdata matching lines.\n";
+    print "Total of ".@logdata." matching lines.\n";
 
 # Write out the collected data to the cache files.
 
