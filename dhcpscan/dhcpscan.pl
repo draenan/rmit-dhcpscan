@@ -474,6 +474,10 @@ EOT
             if ($ipaddr->count == -1) {
                 print OUTFILE "            <tr class=\"unusable\">\n";
             }
+            elsif ( $ipaddr->hostname(0) =~ /unauth/ ) {
+                print OUTFILE "            <tr class=\"static\">\n";
+                push @{ $ipaddr->notes }, "Possible rogue";
+            }
             elsif ( ($ipaddr->count == 0) or ($ipaddr->notes(0) eq "AVAILABLE") ) {
                 if ($p->ping($ipaddr->address)) {
                     print OUTFILE "            <tr class=\"static\">\n";
